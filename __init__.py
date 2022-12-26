@@ -28,7 +28,7 @@ DEBUG=False
 
 __title__ = "Window Switcher Plus"
 __version__ = "0.4.6"
-__trigger__ = " "
+__triggers__ = " "
 __authors__ = ["Ed Perez", "Manuel Schneider", "dshoreman", "Viet Tran"]
 __exec_deps__ = ["wmctrl"]
 
