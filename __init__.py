@@ -11,13 +11,26 @@ import subprocess
 from collections import namedtuple
 from collections import defaultdict
 from functools import reduce
-from shutil import which
 #from fuzzywuzzy import fuzz #https://chairnerd.seatgeek.com/fuzzywuzzy-fuzzy-string-matching-in-python/
 import re
 
-from albert import Item, ProcAction, iconLookup
+from albert import Item, Action, QueryHandler, runDetachedProcess
 from albert import debug as debug_orig
 
+actions = {
+    'switch': {
+        'text': 'Switch Window',
+        'args': '-a'
+    },
+    'move': {
+        'text': 'Move window to this desktop',
+        'args': '-R'
+    },
+    'close': {
+        'text': 'Close the window gracefully',
+        'args': '-c'
+    }
+}
 Window = namedtuple("Window", ["wid", "desktop", "wm_class", "host", "wm_name"])
 # search algo inspired by https://github.com/daniellandau/switcher/blob/master/util.js
 
@@ -26,11 +39,15 @@ matchFuzzy = False
 orderByRelevancy = True
 DEBUG=False
 
-__title__ = "Window Switcher Plus"
-__version__ = "0.4.6"
-__triggers__ = " "
-__authors__ = ["Ed Perez", "Manuel Schneider", "dshoreman", "Viet Tran"]
-__exec_deps__ = ["wmctrl"]
+md_iid = "0.5"
+md_version = "0.5"
+md_id = "window-switcher-plus"
+md_name = "Window Switcher Plus"
+md_description = "advanced window switcher plugin for albert launcher"
+md_url = "https://github.com/VietTralala/window-switcher-plus"
+# md_maintainers = ["Ed Perez", "Manuel Schneider", "dshoreman"]
+md_maintainers = ["Viet Tran", "seiuneko"]
+md_bin_dependencies = ["wmctrl"]
 
 
 def getWindows():
@@ -42,31 +59,27 @@ def getWindows():
     
     return windows
 
+def createActions(wid):
+    for action, action_data in actions.items():
+        yield Action(id=action,
+                     text=action_data['text'],
+                     callable=lambda x=action_data['args']: runDetachedProcess(['wmctrl', '-i', x, wid]))
+
 def createItems(windows, spans=None):
     results = []
     # print('spans: ', spans)
     # [print(w.wm_name) for w in windows]
     # print(len(windows))
     for win in windows:
-        if spans:
-            text_subtext = highlightText(win, spans[win.wid]) 
-        else:
-            text_subtext = {'text':'%s: %s' % (win.desktop, win.wm_class.split('.')[-1].replace('-',' ')),
-                            'subtext':'%s➜%s' %(win.wm_class.split('.')[-1], win.wm_name)}
-        
-        
-        win_instance, win_class = win.wm_class.replace(' ', '-').split('.')
-        iconPath = iconLookup(win_instance) or iconLookup(win_class.lower())
-        results.append( Item(id="%s%s" % (__title__, win.wm_class),
-                                                **text_subtext,
-                                                icon=iconPath,
-                                                actions=[ProcAction(text="Switch Window",
-                                                                    commandline=["wmctrl", '-i', '-a', win.wid] ),
-                                                        ProcAction(text="Move window to this desktop",
-                                                                    commandline=["wmctrl", '-i', '-R', win.wid] ),
-                                                        ProcAction(text="Close the window gracefully.",
-                                                                    commandline=["wmctrl", '-c', win.wid])]
-                                                ))
+        text_subtext = {'text':'%s: %s' % (win.desktop, win.wm_class.split('.')[-1].replace('-',' ')),
+                        'subtext':'%s➜%s' %(win.wm_class.split('.')[-1], win.wm_name)}
+
+        results.append(Item(id="%s%s" % (md_name, win.wm_class),
+                            **text_subtext,
+                            icon=[],
+                            completion='',
+                            actions=list(createActions(win.wid)),
+                            ))
 
 
     return results
@@ -201,7 +214,7 @@ def debug(msg):
     if DEBUG:
         W  = '\033[0m'  # white (normal)
         R  = '\033[31m' # red
-        debug_orig(f"{R}{__title__}:{W} {msg}")
+        debug_orig(f"{R}{md_name}:{W} {msg}")
 
 
 def createRegExp(query_token):
@@ -216,28 +229,36 @@ def createRegExp(query_token):
     return regex
     
 
-def initialize():
-    if which("wmctrl") is None:
-        raise Exception("'wmctrl' is not in $PATH.")
-    
+class Plugin(QueryHandler):
+    def id(self):
+        return md_id
 
-def handleQuery(query):
+    def name(self):
+        return md_name
 
-    stripped = query.string.strip().lower()
-    
-    if stripped:
-        curWS =  getCurrentWorkspace()
-        results = []
-        windows = getWindows()
+    def description(self):
+        return md_description
 
-        debug(query.string)
-        debug(windows)
-        
-        windows, matchPos = filterWindows(stripped, curWS, windows)
-        results = createItems(windows, spans=matchPos)
+    def defaultTrigger(self):
+        return " "
 
-        
-        return results
+    def initialize(self):
+        debug('initialize')
 
+    def finalize(self):
+        debug('finalize')
 
-            
+    def handleQuery(self, query):
+        stripped = query.string.strip().lower()
+
+        if stripped:
+            curWS =  getCurrentWorkspace()
+            results = []
+            windows = getWindows()
+
+            debug(query.string)
+            debug(windows)
+
+            windows, matchPos = filterWindows(stripped, curWS, windows)
+            results = createItems(windows, spans=matchPos)
+            query.add(results)
