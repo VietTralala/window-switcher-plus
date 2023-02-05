@@ -17,7 +17,7 @@ Thanks to the following existing projects which this script is based on:
 
 # Install 
 ```
-cd ~/.local/share/albert/org.albert.extension.python/modules/
+cd ~/.local/share/albert/python/plugins # use this in albert 0.20
 git pull https://github.com/vthuongt/window-switcher-plus.git
 ```
 then activate the plugin in the settings 

@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 
 """
-X11 window switcher - list and activate windows.
-to enable search on all workspaces start query with *
-performs tokenized search-> order doesnt matter
-fuzzy search can be enabled in settings
+X11 window switcher - list and activate windows. 
+
+to enable search on all workspaces start query with * 
+
+performs tokenized search-> order doesnt matter 
+
+fuzzy search can be enabled in source code
+
+default trigger is space
 """
 
 import subprocess
@@ -13,9 +18,12 @@ from collections import defaultdict
 from functools import reduce
 #from fuzzywuzzy import fuzz #https://chairnerd.seatgeek.com/fuzzywuzzy-fuzzy-string-matching-in-python/
 import re
+import os
 
 from albert import Item, Action, QueryHandler, runDetachedProcess
+# from albert import iconLookup # TODO this is the odl import, how does the new one look?
 from albert import debug as debug_orig
+from albert import info, warning
 
 actions = {
     'switch': {
@@ -37,17 +45,21 @@ Window = namedtuple("Window", ["wid", "desktop", "wm_class", "host", "wm_name"])
 ### Settings###
 matchFuzzy = False
 orderByRelevancy = True
-DEBUG=False
+DEBUG=True
 
 md_iid = "0.5"
 md_version = "0.5"
 md_id = "window-switcher-plus"
 md_name = "Window Switcher Plus"
-md_description = "advanced window switcher plugin for albert launcher"
+md_description = "advanced fuzzy window switcher plugin for albert launcher"
 md_url = "https://github.com/VietTralala/window-switcher-plus"
 # md_maintainers = ["Ed Perez", "Manuel Schneider", "dshoreman"]
 md_maintainers = ["Viet Tran", "seiuneko"]
 md_bin_dependencies = ["wmctrl"]
+
+if os.environ['XDG_SESSION_TYPE'] != 'X11':
+    warning((f"[{md_id}]:"
+        f"wmctrl only works for X11. On Wayland wmctrl will not be able to control all windows."))
 
 
 def getWindows():
@@ -71,12 +83,20 @@ def createItems(windows, spans=None):
     # [print(w.wm_name) for w in windows]
     # print(len(windows))
     for win in windows:
-        text_subtext = {'text':'%s: %s' % (win.desktop, win.wm_class.split('.')[-1].replace('-',' ')),
-                        'subtext':'%s➜%s' %(win.wm_class.split('.')[-1], win.wm_name)}
 
+        if spans:
+            text_subtext = highlightText(win, spans[win.wid]) 
+        else:
+            text_subtext = {'text':'%s: %s' % (win.desktop, win.wm_class.split('.')[-1].replace('-',' ')),
+                            'subtext':'%s➜%s' %(win.wm_class.split('.')[-1], win.wm_name)}
+
+
+        win_instance, win_class = win.wm_class.replace(' ', '-').split('.')
+        iconNames = [win_instance, win_class.lower()]
+        iconPathQueries = [f"xdg:{n}" for n in iconNames]
         results.append(Item(id="%s%s" % (md_name, win.wm_class),
                             **text_subtext,
-                            icon=[],
+                            icon=iconPathQueries,
                             completion='',
                             actions=list(createActions(win.wid)),
                             ))
@@ -247,6 +267,9 @@ class Plugin(QueryHandler):
 
     def finalize(self):
         debug('finalize')
+    
+    def synopsis(self):
+        return "use fuzzy search to switch windows"
 
     def handleQuery(self, query):
         stripped = query.string.strip().lower()
@@ -257,7 +280,8 @@ class Plugin(QueryHandler):
             windows = getWindows()
 
             debug(query.string)
-            debug(windows)
+            for win in windows:
+                debug(win)
 
             windows, matchPos = filterWindows(stripped, curWS, windows)
             results = createItems(windows, spans=matchPos)
